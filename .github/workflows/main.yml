@@ -1,0 +1,95 @@
+name: Advance ML Workflow
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Set up job (Otomatis)
+    
+    # 2. Run actions/checkout@v3
+    - name: Run actions/checkout@v3
+      uses: actions/checkout@v3
+
+    # 3. Set up Python 3.12.7
+    - name: Set up Python 3.12.7
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.12.7"
+
+    # 4. Check Env
+    - name: Check Env
+      run: |
+        echo "User: ${{ secrets.DOCKERHUB_USERNAME }}"
+
+    # 5. Install dependencies
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install mlflow==2.19.0 scikit-learn pandas matplotlib seaborn virtualenv
+
+    # 6. Run mlflow project
+    - name: Run mlflow project
+      run: |
+        cd MLProject
+        # Mengikuti standar panitia menggunakan env-manager local
+        mlflow run . --env-manager=local --experiment-id 0
+
+    # 7. Get latest MLflow run_id
+    - name: Get latest MLflow run_id
+      id: get_run_id
+      run: |
+        # Menggunakan logika 'ls' dari contoh panitia agar pasti dapat ID yang benar
+        # Karena tadi ada 'cd MLProject', kita arahkan path-nya ke sana
+        RUN_ID=$(ls -td MLProject/mlruns/0/*/ | head -n 1 | cut -d'/' -f4)
+        echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
+        echo "Ditemukan RUN_ID: $RUN_ID"
+
+    # 8. Install Python dependencies
+    - name: Install Python dependencies
+      run: pip install -r MLProject/requirements.txt
+
+    # 9. Upload to GitHub
+    - name: Upload to GitHub
+      uses: actions/upload-artifact@v4
+      with:
+        name: model-artifact
+        # Path disesuaikan dengan folder MLProject
+        path: MLProject/mlruns/0/${{ env.RUN_ID }}/artifacts/model
+
+    # 10. Build Docker Model
+    - name: Build Docker Model
+      run: |
+        # Menggunakan URI lokal hasil training tadi
+        mlflow models build-docker \
+          --model-uri "MLProject/mlruns/0/${{ env.RUN_ID }}/artifacts/model" \
+          --name "exam-score-model" \
+          --env-manager=local
+
+    # 11. Log in to Docker Hub
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        # Menggunakan nama secrets sesuai screenshot kamu (DOCKERHUB_USERNAME & DOCKERHUB_TOKEN)
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    # 12. Tag Docker Image
+    - name: Tag Docker Image
+      run: |
+        docker tag exam-score-model ${{ secrets.DOCKERHUB_USERNAME }}/exam-score-model:latest
+
+    # 13. Push Docker Image
+    - name: Push Docker Image
+      run: |
+        docker push ${{ secrets.DOCKERHUB_USERNAME }}/exam-score-model:latest
+
+    # 14. Post Log in to Docker Hub
+    - name: Post Log in to Docker Hub
+      run: docker logout
+
+    # 15-17. Post Steps & Complete (Otomatis)

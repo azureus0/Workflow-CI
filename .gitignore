@@ -1,0 +1,10 @@
+MLProject/mlruns/
+mlruns/
+MLProject/artifacts/
+artifacts/
+MLProject/mlflow.db/
+.venv/
+__pycache__/
+*.pyc
+requirements.txt
+.env
